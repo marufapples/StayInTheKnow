@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import itertools
-import os
 from contextlib import contextmanager
 from datetime import timezone
 from pathlib import Path
@@ -10,6 +9,7 @@ from pathlib import Path
 import instaloader
 from instaloader import exceptions as ix
 
+from ..cookies import BrowserCookie, describe_session, load_session_file, redact, to_cookiejar
 from .base import AuthError, PostInfo, ProfileInfo, RateLimited, SourceError
 
 AUTH_HINTS = ("checkpoint", "challenge", "login", "401", "logged in", "logged out", "csrf")
@@ -23,26 +23,19 @@ def session_path(session_dir: Path, username: str) -> Path:
     return session_dir / f"session-{username}"
 
 
-def new_loader() -> instaloader.Instaloader:
+def new_loader(user_agent: str) -> instaloader.Instaloader:
     return instaloader.Instaloader(
         quiet=True,
+        user_agent=user_agent,  # must be set before the session is built; headers are derived from it
+        iphone_support=False,   # otherwise some requests go out with an iPhone-app UA
         download_pictures=False,
         download_videos=False,
         download_video_thumbnails=False,
         save_metadata=False,
         compress_json=False,
-        max_connection_attempts=2,
+        max_connection_attempts=1,
         request_timeout=60,
     )
-
-
-def save_session(loader: instaloader.Instaloader, session_dir: Path, username: str) -> Path:
-    session_dir.mkdir(parents=True, exist_ok=True)
-    os.chmod(session_dir, 0o700)
-    path = session_path(session_dir, username)
-    loader.save_session_to_file(str(path))
-    os.chmod(path, 0o600)
-    return path
 
 
 @contextmanager
@@ -74,17 +67,53 @@ def translate_errors():
         raise SourceError(str(e)) from e
 
 
+def build_loader(username: str, cookies: list[BrowserCookie], user_agent: str) -> instaloader.Instaloader:
+    """An instaloader whose requests session carries the browser cookies with their
+    original domain/path/expiry/secure/HttpOnly/SameSite and the browser's UA."""
+    missing = {"sessionid", "csrftoken"} - {c.name for c in cookies}
+    if missing:
+        raise ValueError(f"session has no {', '.join(sorted(missing))} cookie; log into Instagram in the browser "
+                         "and re-run `sitk login`")
+    loader = new_loader(user_agent)
+    jar = to_cookiejar(cookies)
+    # load_session builds the session headers (UA, X-CSRFToken); then swap in the
+    # attribute-preserving jar instead of instaloader's name/value-only one.
+    loader.context.load_session(username, {c.name: c.value for c in cookies})
+    loader.context._session.cookies = jar  # noqa: SLF001
+    return loader
+
+
 class InstagramSource:
-    def __init__(self, session_user: str, session_dir: Path):
+    def __init__(self, session_user: str, session_dir: Path, user_agent_override: str = ""):
         if not session_user:
             raise AuthError("no session_user configured; run `sitk login`")
         path = session_path(session_dir, session_user)
         if not path.exists():
             raise AuthError(f"no saved session for @{session_user}; run `sitk login`")
-        self.loader = new_loader()
-        with translate_errors():
-            self.loader.load_session_from_file(session_user, str(path))
+        try:
+            data = load_session_file(path)
+            self.user_agent = user_agent_override or data["user_agent"]
+            self.loader = build_loader(session_user, data["cookies"], self.user_agent)
+        except ValueError as e:
+            raise AuthError(str(e)) from e
         self.session_user = session_user
+        self.session = self.loader.context._session  # noqa: SLF001
+        self.last_response: tuple[int, str, str] | None = None
+        self.session.hooks["response"].append(self._record)
+
+    def _record(self, resp, *args, **kwargs):
+        # Passive: remembers what Instagram answered, for `sitk doctor`. Adds no requests.
+        if "instagram.com" in resp.url:
+            body = " ".join((resp.text or "")[:500].split())
+            self.last_response = (resp.status_code, resp.url.split("?")[0], body)
+        return resp
+
+    def diagnostics(self) -> list[str]:
+        last = None
+        if self.last_response:
+            status, url, body = self.last_response
+            last = (status, url, redact(body, self.session.cookies))
+        return describe_session(self.session.cookies, self.user_agent, last)
 
     def whoami(self) -> str:
         with translate_errors():

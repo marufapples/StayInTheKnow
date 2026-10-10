@@ -3,6 +3,8 @@
 [instagram]
 # The account whose browser session makes the requests (set by `sitk login`).
 session_user = ""
+# Optional. Leave empty to use the exact UA of the browser the cookie was imported from.
+# user_agent = ""
 
 # Public pages to watch for new posts (events, local happenings).
 # event_pages = ["somevenue", "citydowntown"]

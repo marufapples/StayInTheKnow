@@ -36,6 +36,7 @@ class Schedule:
 @dataclass
 class Config:
     session_user: str = ""
+    user_agent: str = ""  # override; default is the UA of the browser the cookie came from
     watch: list[WatchTarget] = field(default_factory=list)
     event_pages: list[str] = field(default_factory=list)
     schedule: Schedule = field(default_factory=Schedule)
@@ -70,6 +71,7 @@ def load_config(path: Path = CONFIG_PATH, env_path: Path = ENV_PATH) -> Config:
 
     return Config(
         session_user=raw.get("instagram", {}).get("session_user", "").lstrip("@"),
+        user_agent=raw.get("instagram", {}).get("user_agent", "").strip(),
         watch=[WatchTarget(**{**w, "handle": w["handle"].lstrip("@")}) for w in raw.get("watch", [])],
         event_pages=[h.lstrip("@") for h in raw.get("instagram", {}).get("event_pages", [])],
         schedule=schedule,
