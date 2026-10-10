@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import httpx
 
@@ -21,6 +22,13 @@ log = logging.getLogger("sitk")
 LAUNCHD_LABEL = "com.stayintheknow.sitk"
 LAUNCHD_PATH = os.path.expanduser(f"~/Library/LaunchAgents/{LAUNCHD_LABEL}.plist")
 TICK_SECONDS = 15 * 60
+
+_APP_SUPPORT = Path.home() / "Library" / "Application Support"
+CHROMIUM_DIRS = {
+    "chrome": _APP_SUPPORT / "Google" / "Chrome",
+    "brave": _APP_SUPPORT / "BraveSoftware" / "Brave-Browser",
+    "edge": _APP_SUPPORT / "Microsoft Edge",
+}
 
 
 def setup_logging(verbose: bool) -> None:
@@ -73,9 +81,22 @@ def cmd_login(args) -> int:
 
     from .sources.instagram import new_loader, save_session
 
-    print(f"Reading your Instagram session cookie from {args.browser} "
+    cookie_file = None
+    if args.profile:
+        base = CHROMIUM_DIRS.get(args.browser)
+        if not base:
+            print(f"--profile is only supported for {', '.join(CHROMIUM_DIRS)}")
+            return 1
+        cookie_file = next((str(p) for p in (base / args.profile / "Network" / "Cookies",
+                                               base / args.profile / "Cookies") if p.exists()), None)
+        if not cookie_file:
+            print(f"No cookie database for profile '{args.profile}' under {base}")
+            return 1
+
+    print(f"Reading your Instagram session cookie from {args.browser}"
+          f"{' (' + args.profile + ')' if args.profile else ''} "
           "(macOS may ask for Keychain access; allow it).")
-    cookies = get_cookies_from_instagram("instagram", args.browser)
+    cookies = get_cookies_from_instagram("instagram", args.browser, cookie_file)
     if not cookies or "sessionid" not in cookies:
         print(f"No Instagram login found in {args.browser}. Log into instagram.com there first.")
         return 1
@@ -216,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("login", help="import your Instagram session from a browser")
     p.add_argument("--browser", required=True,
                    choices=["chrome", "safari", "firefox", "brave", "edge", "chromium", "opera", "vivaldi"])
+    p.add_argument("--profile", help='browser profile folder, e.g. "Profile 2" (default: Default)')
     p.set_defaults(fn=cmd_login)
 
     p = sub.add_parser("doctor", help="check config, webhook and Instagram session")
