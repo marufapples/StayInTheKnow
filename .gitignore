@@ -1,0 +1,14 @@
+# secrets & local state
+.env
+data/
+*.session
+session-*
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+# os/editor
+.DS_Store
+.claude/settings.local.json
