@@ -12,3 +12,6 @@ __pycache__/
 # os/editor
 .DS_Store
 .claude/settings.local.json
+
+# local config (handles are personal)
+config.toml

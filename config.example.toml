@@ -1,0 +1,26 @@
+# Copy to config.toml (gitignored) and edit.
+
+[instagram]
+# The account whose browser session makes the requests (set by `sitk login`).
+session_user = ""
+
+# Public pages to watch for new posts (events, local happenings).
+# event_pages = ["somevenue", "citydowntown"]
+event_pages = []
+
+# Accounts you own whose followers/following you want deltas for.
+# If an account is private, the session account must be it or follow it.
+# Repeat the [[watch]] block for each account.
+[[watch]]
+handle = "my_alt"
+followers = true
+following = true
+report_removals = true   # also alert on unfollows / lost followers
+
+[schedule]
+relations_hours = 3       # how often to check follower/following counts
+full_refresh_hours = 24   # force a full list fetch at least this often
+posts_hours = 3           # how often to check event pages
+jitter = 0.2              # +/- 20% randomness on every interval
+quiet_hours = [1, 7]      # no Instagram requests from 1am to 7am local; [] to disable
+heartbeat_hour = 9        # daily "still alive" message at/after this hour

@@ -3,7 +3,7 @@
 Personal tool, runs on my Mac, alerts me through Discord. Free, no cloud, no web app.
 
 ## What it does
-1. **Alt account watcher**: logged in as my own alt account, detects *new followers*, *new follows (following list)*, and optionally unfollows/unfollowed-by. Pings me on Discord.
+1. **Alt account watcher**: using a session from my own account (main or alt), watches **my own alt accounts** for *new followers*, *new follows*, and optionally unfollows/lost followers. Pings me on Discord. (Private alts must be followed by the session account.)
 2. **Event pages watcher**: watches 2-3 public Instagram accounts (events/local happenings), posts new posts to Discord as embeds with parsed date/venue. Quiet, no ping unless it looks like an event.
 3. **Health**: tells me when it breaks (session expired, challenged, not running).
 
@@ -23,10 +23,11 @@ The follower/following tracking only ever covers the account whose session I log
 ## Polling behavior (gentle on purpose)
 | Job | Interval | Notes |
 |---|---|---|
-| Event-page posts (2-3 accounts) | every 30 min | latest ~12 posts each, stop at first already-seen id |
-| Followers list | every 60 min | full list needed for the diff |
-| Following list | every 60 min | same |
-| Cheap pre-check | every 15 min | profile follower/following *counts* only; if the counts are unchanged, skip the full list fetch |
+| Event-page posts | every ~3 h | latest 12 posts each, skip already-seen ids (pinned posts make "stop at first seen" wrong) |
+| Count pre-check per watched alt | every ~3 h | profile follower/following *counts* only |
+| Full followers/following list | only when a count changed, a removal is pending confirmation, or 24 h since last full fetch | |
+
+launchd ticks every 15 min, but a tick only does work when a job is due, so most ticks make zero requests.
 
 - Random jitter (±20%) on every run, delays between requests, quiet hours (e.g. 1-7am) optional.
 - Exponential backoff on 429/"please wait"; cap total requests per hour.
@@ -81,6 +82,9 @@ StayInTheKnow/
   launchd/com.stayintheknow.plist.template
   tests/                     # diff, extract, notify (mocked), scheduler
 ```
+
+## Status (2026-10-10)
+Phases 0, 1, 3, 6 (launchd part) and 7 are built and tested with fakes. Discord webhook is verified live. Remaining: phase 2 (login), 4 (baseline on real accounts), 5 (event handles), healthchecks.io.
 
 ## Phases (I do the building; items marked ME need me)
 0. **Scaffold**: git init, `.gitignore` (data/, .env, sessions), uv project, CI-less local pytest. Install check.
