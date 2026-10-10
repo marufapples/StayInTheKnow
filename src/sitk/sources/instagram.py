@@ -12,7 +12,10 @@ from instaloader import exceptions as ix
 
 from .base import AuthError, PostInfo, ProfileInfo, RateLimited, SourceError
 
-AUTH_HINTS = ("checkpoint", "challenge", "login", "401", "logged in", "csrf")
+AUTH_HINTS = ("checkpoint", "challenge", "login", "401", "logged in", "logged out", "csrf")
+# Instagram flagged the account/session as automated. Treat like an auth problem:
+# stop all requests until the owner decides what to do.
+BLOCK_HINTS = ("feedback_required", "checkpoint_required", "challenge_required", "consent_required")
 RATE_HINTS = ("429", "please wait", "too many", "rate")
 
 
@@ -46,6 +49,12 @@ def save_session(loader: instaloader.Instaloader, session_dir: Path, username: s
 def translate_errors():
     try:
         yield
+    except ix.AbortDownloadException as e:
+        # Not an InstaloaderException subclass; raised on blocks and forced logouts.
+        text = str(e).lower()
+        if any(h in text for h in RATE_HINTS) and not any(h in text for h in BLOCK_HINTS):
+            raise RateLimited(str(e)) from e
+        raise AuthError(f"Instagram blocked or logged out the session: {e}") from e
     except (ix.LoginRequiredException, ix.LoginException) as e:
         raise AuthError(str(e)) from e
     except ix.TooManyRequestsException as e:
@@ -56,6 +65,8 @@ def translate_errors():
         raise SourceError(f"profile does not exist: {e}") from e
     except (ix.QueryReturnedForbiddenException, ix.ConnectionException, ix.BadResponseException) as e:
         text = str(e).lower()
+        if any(h in text for h in BLOCK_HINTS):
+            raise AuthError(f"Instagram blocked the session: {e}") from e
         if any(h in text for h in RATE_HINTS):
             raise RateLimited(str(e)) from e
         if any(h in text for h in AUTH_HINTS):

@@ -146,7 +146,7 @@ def test_auth_error_pauses_and_alerts_once(env):
     assert not app.tick()
     advance(clock, 3.1)
     assert not app.tick()
-    alerts = [m for m in pings(discord) if "fresh login" in m["content"]]
+    alerts = [m for m in pings(discord) if "polling is **paused**" in m["content"]]
     assert len(alerts) == 1
     assert app.store.get("auth_broken")
 

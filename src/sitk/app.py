@@ -123,8 +123,10 @@ class App:
         self.store.set(AUTH_BROKEN, message[:500] or "session invalid")
         log.error("Instagram session broken: %s", message)
         self.safe_send(
-            "⚠️ Instagram session needs a fresh login, so polling is **paused**.\n"
-            "Log into Instagram in your browser, then run `sitk login --browser <browser>`.\n"
+            "⚠️ Instagram rejected the session (logged out, challenged, or flagged as automated), "
+            "so polling is **paused**.\n"
+            "Open Instagram in your browser and clear any prompt it shows, then run "
+            "`sitk login --browser <browser>` to resume.\n"
             f"Reason: {message[:300]}",
             ping=True,
         )
